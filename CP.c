@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Structure definitions
 struct AVLNode
 {
     int key;
@@ -16,7 +17,148 @@ struct AuctionItem
     int itemId;
     char itemName[50];
     float currentBid;
+    float previousBid;
 };
+
+// Function prototypes
+struct AVLNode *createNode(struct AuctionItem *item);
+void freeAVLTree(struct AVLNode *node);
+int height(struct AVLNode *node);
+int max(int a, int b);
+struct AVLNode *rightRotate(struct AVLNode *y);
+struct AVLNode *leftRotate(struct AVLNode *x);
+int getBalance(struct AVLNode *node);
+struct AVLNode *insertNode(struct AVLNode *node, struct AuctionItem *item);
+struct AVLNode *minValueNode(struct AVLNode *node);
+struct AVLNode *deleteNode(struct AVLNode *root, int key);
+struct AuctionItem *searchItem(struct AVLNode *root, int itemId);
+void displayTree(struct AVLNode *root);
+void displayMenu();
+void saveToFile(struct AVLNode *root, const char *filename);
+struct AVLNode *loadFromFile(const char *filename);
+
+// Main function
+int main()
+{
+    struct AVLNode *root = NULL;
+    int choice;
+    const char *filename = "auction_data.txt";
+
+    // Load data from file
+    root = loadFromFile(filename);
+
+    do
+    {
+        displayMenu();
+        printf("Enter your choice: ");
+        if (scanf("%d", &choice) != 1)
+        {
+            printf("Invalid input. Please enter a number.\n");
+            while (getchar() != '\n'); // Clear input buffer
+            continue;
+        }
+
+        switch (choice)
+        {
+        case 1:
+        {
+            struct AuctionItem *newItem = (struct AuctionItem *)malloc(sizeof(struct AuctionItem));
+            if (newItem == NULL)
+            {
+                printf("Memory allocation failed.\n");
+                exit(EXIT_FAILURE);
+            }
+            printf("Enter Item ID: ");
+            if (scanf("%d", &newItem->itemId) != 1)
+            {
+                printf("Invalid input. Please enter a number.\n");
+                free(newItem);
+                while (getchar() != '\n'); // Clear input buffer
+                continue;
+            }
+            printf("Enter Item Name: ");
+            getchar(); // Consume newline character left in input buffer
+            fgets(newItem->itemName, sizeof(newItem->itemName), stdin);
+            newItem->itemName[strcspn(newItem->itemName, "\n")] = '\0'; // Remove newline character if present
+            printf("Enter Current Bid: ");
+            if (scanf("%f", &newItem->currentBid) != 1)
+            {
+                printf("Invalid input. Please enter a number.\n");
+                free(newItem);
+                while (getchar() != '\n'); // Clear input buffer
+                continue;
+            }
+
+            // Initialize previous bid to 0
+            newItem->previousBid = 0.0;
+
+            root = insertNode(root, newItem);
+            printf("Item added successfully!\n");
+            break;
+        }
+        case 2:
+        {
+            int itemId;
+            float newBid;
+            printf("Enter Item ID to place bid: ");
+            if (scanf("%d", &itemId) != 1)
+            {
+                printf("Invalid input. Please enter a number.\n");
+                while (getchar() != '\n'); // Clear input buffer
+                continue;
+            }
+            printf("Enter New Bid: ");
+            if (scanf("%f", &newBid) != 1)
+            {
+                printf("Invalid input. Please enter a number.\n");
+                while (getchar() != '\n'); // Clear input buffer
+                continue;
+            }
+
+            struct AuctionItem *item = searchItem(root, itemId);
+            if (item != NULL)
+            {
+                if (newBid > item->currentBid)
+                {
+                    item->previousBid = item->currentBid; // Save previous bid
+                    item->currentBid = newBid;
+                    printf("Bid placed successfully!\n");
+                }
+                else
+                {
+                    printf("New bid must be higher than the current bid.\n");
+                }
+            }
+            else
+            {
+                printf("Item not found.\n");
+            }
+            break;
+        }
+        case 3:
+        {
+            printf("Auction Details:\n");
+            displayTree(root);
+            break;
+        }
+        case 4:
+            printf("Exiting...\n");
+            break;
+        default:
+            printf("Invalid choice! Please enter a valid option.\n");
+        }
+    } while (choice != 4);
+
+    // Save data to file before exiting
+    saveToFile(root, filename);
+
+    // Free memory
+    freeAVLTree(root);
+
+    return 0;
+}
+
+// Function implementations
 
 struct AVLNode *createNode(struct AuctionItem *item)
 {
@@ -213,7 +355,7 @@ void displayTree(struct AVLNode *root)
     if (root != NULL)
     {
         displayTree(root->left);
-        printf("Item ID: %d, Item Name: %s, Current Bid: %.2f\n", root->item->itemId, root->item->itemName, root->item->currentBid);
+        printf("Item ID: %d, Item Name: %s, Current Bid: %.2f, Previous Bid: %.2f\n", root->item->itemId, root->item->itemName, root->item->currentBid, root->item->previousBid);
         displayTree(root->right);
     }
 }
@@ -227,114 +369,62 @@ void displayMenu()
     printf("4. Exit\n");
 }
 
-int main()
+void saveToFile(struct AVLNode *root, const char *filename)
 {
-    struct AVLNode *root = NULL;
-    int choice;
-    do
+    FILE *file = fopen(filename, "w");
+    if (file == NULL)
     {
-        displayMenu();
-        printf("Enter your choice: ");
-        if (scanf("%d", &choice) != 1)
-        {
-            printf("Invalid input. Please enter a number.\n");
-            while (getchar() != '\n')
-                ; // Clear input buffer
-            continue;
-        }
+        printf("Error opening file for writing.\n");
+        return;
+    }
+    saveNodesToFile(root, file); // Recursive function to save nodes to file
+    fclose(file);
+}
 
-        switch (choice)
-        {
-        case 1:
-        {
-            struct AuctionItem *newItem = (struct AuctionItem *)malloc(sizeof(struct AuctionItem));
-            if (newItem == NULL)
-            {
-                printf("Memory allocation failed.\n");
-                exit(EXIT_FAILURE);
-            }
-            printf("Enter Item ID: ");
-            if (scanf("%d", &newItem->itemId) != 1)
-            {
-                printf("Invalid input. Please enter a number.\n");
-                free(newItem);
-                while (getchar() != '\n')
-                    ; // Clear input buffer
-                continue;
-            }
-            printf("Enter Item Name: ");
-            getchar(); // Consume newline character left in input buffer
-            fgets(newItem->itemName, sizeof(newItem->itemName), stdin);
-            newItem->itemName[strcspn(newItem->itemName, "\n")] = '\0'; // Remove newline character if present
-            printf("Enter Current Bid: ");
-            if (scanf("%f", &newItem->currentBid) != 1)
-            {
-                printf("Invalid input. Please enter a number.\n");
-                free(newItem);
-                while (getchar() != '\n')
-                    ; // Clear input buffer
-                continue;
-            }
+void saveNodesToFile(struct AVLNode *node, FILE *file)
+{
+    if (node == NULL)
+        return;
 
-            root = insertNode(root, newItem);
-            printf("Item added successfully!\n");
-            break;
-        }
-        case 2:
+    // Save current node's data to file
+    fprintf(file, "%d,%s,%.2f,%.2f\n", node->item->itemId, node->item->itemName, node->item->currentBid, node->item->previousBid);
+
+    // Recursively save left and right subtrees
+    saveNodesToFile(node->left, file);
+    saveNodesToFile(node->right, file);
+}
+
+struct AVLNode *loadFromFile(const char *filename)
+{
+    FILE *file = fopen(filename, "r");
+    if (file == NULL)
+    {
+        printf("File not found or unable to open.\n");
+        return NULL;
+    }
+
+    struct AVLNode *root = NULL;
+    int itemId;
+    char itemName[50];
+    float currentBid, previousBid;
+
+    // Read data from file and insert into AVL tree
+    while (fscanf(file, "%d,%[^,],%f,%f\n", &itemId, itemName, &currentBid, &previousBid) == 4)
+    {
+        struct AuctionItem *newItem = (struct AuctionItem *)malloc(sizeof(struct AuctionItem));
+        if (newItem == NULL)
         {
-            int itemId;
-            float newBid;
-            printf("Enter Item ID to place bid: ");
-            if (scanf("%d", &itemId) != 1)
-            {
-                printf("Invalid input. Please enter a number.\n");
-                while (getchar() != '\n')
-                    ; // Clear input buffer
-                continue;
-            }
-            printf("Enter New Bid: ");
-            if (scanf("%f", &newBid) != 1)
-            {
-                printf("Invalid input. Please enter a number.\n");
-                while (getchar() != '\n')
-                    ; // Clear input buffer
-                continue;
-            }
-
-            struct AuctionItem *item = searchItem(root, itemId);
-            if (item != NULL)
-            {
-                if (newBid > item->currentBid)
-                {
-                    item->currentBid = newBid;
-                    printf("Bid placed successfully!\n");
-                }
-                else
-                {
-                    printf("New bid must be higher than the current bid.\n");
-                }
-            }
-            else
-            {
-                printf("Item not found.\n");
-            }
-            break;
+            printf("Memory allocation failed.\n");
+            exit(EXIT_FAILURE);
         }
-        case 3:
-        {
-            printf("Auction Details:\n");
-            displayTree(root);
-            break;
-        }
-        case 4:
-            printf("Exiting...\n");
-            break;
-        default:
-            printf("Invalid choice! Please enter a valid option.\n");
-        }
-    } while (choice != 4);
+        newItem->itemId = itemId;
+        strcpy(newItem->itemName, itemName);
+        newItem->currentBid = currentBid;
+        newItem->previousBid = previousBid;
 
-    freeAVLTree(root);
+        root = insertNode(root, newItem);
+    }
 
-    return 0;
+    fclose(file);
+    return root;
 }
