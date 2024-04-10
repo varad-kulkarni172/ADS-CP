@@ -82,7 +82,7 @@ int main()
             fgets(newItem->itemName, sizeof(newItem->itemName), stdin);
             newItem->itemName[strcspn(newItem->itemName, "\n")] = '\0';
 
-            printf("Enter Current Bid: ");
+            printf("Enter Base Price: ");
             if (scanf("%f", &newItem->currentBid) != 1)
             {
                 printf("Invalid input. Please enter a number.\n");
@@ -397,7 +397,8 @@ void saveNodesToFile(struct AVLNode *node, FILE *file)
     if (node == NULL)
         return;
 
-    fprintf(file, "%d,%s,%.2f,%.2f\n", node->item->itemId, node->item->itemName, node->item->currentBid, node->item->previousBid);
+    fprintf(file,"BIDDING HUB: AVL-BASED AUCTION ITEM MANAGEMENT\n\n");
+    fprintf(file, "Item ID: %d\nItem Name: %s\nUpdated Price: %.2f\nPrevious Bid: %.2f\n", node->item->itemId, node->item->itemName, node->item->currentBid, node->item->previousBid);
 
     saveNodesToFile(node->left, file);
     saveNodesToFile(node->right, file);
