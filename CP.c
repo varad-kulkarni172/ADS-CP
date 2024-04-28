@@ -1,440 +1,329 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <windows.h>
 
-struct AVLNode
-{
-    int key;
-    int height;
-    struct AuctionItem *item;
-    struct AVLNode *left;
-    struct AVLNode *right;
-};
-
-struct AuctionItem
-{
-    int itemId;
+// AVL Tree Node Structure
+typedef struct AVLNode {
+    char itemId[50];
     char itemName[50];
-    float currentBid;
-    float previousBid;
-};
+    char currentBid[50];
+    int height;
+    struct AVLNode* left;
+    struct AVLNode* right;
+} AVLNode;
 
-struct AVLNode *createNode(struct AuctionItem *item);
-void freeAVLTree(struct AVLNode *node);
-int height(struct AVLNode *node);
-int max(int a, int b);
-struct AVLNode *rightRotate(struct AVLNode *y);
-struct AVLNode *leftRotate(struct AVLNode *x);
-int getBalance(struct AVLNode *node);
-struct AVLNode *insertNode(struct AVLNode *node, struct AuctionItem *item);
-struct AVLNode *minValueNode(struct AVLNode *node);
-struct AVLNode *deleteNode(struct AVLNode *root, int key);
-struct AuctionItem *searchItem(struct AVLNode *root, int itemId);
-void displayTree(struct AVLNode *root);
-void displayMenu();
-void saveToFile(struct AVLNode *root, const char *filename);
-struct AVLNode *loadFromFile(const char *filename);
+// Function prototypes
+LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+void AddControls(HWND hwnd);
+void AddItem(HWND hwnd);
+void PlaceBid(HWND hwnd);
+void DisplayAuctionDetails(HWND hwnd);
+void ExitApplication(HWND hwnd);
+void SaveToFile();
+void insert(AVLNode** root, char itemId[], char itemName[], char currentBid[]);
+AVLNode* newNode(char itemId[], char itemName[], char currentBid[]);
+int height(AVLNode* node);
+int balanceFactor(AVLNode* node);
+AVLNode* rightRotate(AVLNode* y);
+AVLNode* leftRotate(AVLNode* x);
+void preorderTraversal(AVLNode* root);
 
-int main()
-{
-    struct AVLNode *root = NULL;
-    const char *filename = "auction_data.txt";
+// Global variables
+HWND hwndMain;
+HWND hwndItemId, hwndItemName, hwndCurrentBid;
+HWND hwndNewBid;
 
-    root = loadFromFile(filename);
+// AVL tree root
+AVLNode* root = NULL;
 
-    int choice;
+// WinMain function
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // Register window class
+    WNDCLASS wc = { 0 };
+    wc.lpfnWndProc = WndProc;
+    wc.hInstance = hInstance;
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    wc.lpszClassName = "MyWindowClass";
 
-    do
-    {
-        displayMenu();
-        printf("Enter your choice: ");
-        if (scanf("%d", &choice) != 1)
-        {
-            printf("Invalid input. Please enter a number.\n");
-            while (getchar() != '\n')
-                ;
-            continue;
-        }
+    if (!RegisterClass(&wc)) {
+        MessageBox(NULL, "Window Registration Failed!", "Error", MB_ICONERROR | MB_OK);
+        return 0;
+    }
 
-        switch (choice)
-        {
+    // Create window
+    hwndMain = CreateWindow("MyWindowClass", "Auction Bidding Application", WS_OVERLAPPEDWINDOW, 100, 100, 500, 400, NULL, NULL, hInstance, NULL);
+
+    if (hwndMain == NULL) {
+        MessageBox(NULL, "Window Creation Failed!", "Error", MB_ICONERROR | MB_OK);
+        return 0;
+    }
+
+    // Display window
+    ShowWindow(hwndMain, nCmdShow);
+    UpdateWindow(hwndMain);
+
+    // Run the message loop
+    MSG msg = { 0 };
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    return msg.wParam;
+}
+
+// Window procedure
+LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_CREATE:
+        AddControls(hwnd);
+        break;
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
         case 1:
-        {
-            struct AuctionItem *newItem = (struct AuctionItem *)malloc(sizeof(struct AuctionItem));
-            if (newItem == NULL)
-            {
-                printf("Memory allocation failed.\n");
-                exit(EXIT_FAILURE);
-            }
-
-            printf("Enter Item ID: ");
-            if (scanf("%d", &newItem->itemId) != 1)
-            {
-                printf("Invalid input. Please enter a number.\n");
-                free(newItem);
-                while (getchar() != '\n')
-                    ;
-                continue;
-            }
-
-            printf("Enter Item Name: ");
-            getchar();
-            fgets(newItem->itemName, sizeof(newItem->itemName), stdin);
-            newItem->itemName[strcspn(newItem->itemName, "\n")] = '\0';
-
-            printf("Enter Base Price: ");
-            if (scanf("%f", &newItem->currentBid) != 1)
-            {
-                printf("Invalid input. Please enter a number.\n");
-                free(newItem);
-                while (getchar() != '\n')
-                    ;
-                continue;
-            }
-
-            newItem->previousBid = 0.0;
-
-            root = insertNode(root, newItem);
-            printf("Item added successfully!\n");
-
-            saveToFile(root, filename);
-
+            AddItem(hwnd);
             break;
-        }
         case 2:
-        {
-            int itemId;
-            float newBid;
-
-            printf("Enter Item ID to place bid: ");
-            if (scanf("%d", &itemId) != 1)
-            {
-                printf("Invalid input. Please enter a number.\n");
-                while (getchar() != '\n')
-                    ;
-                continue;
-            }
-
-            printf("Enter New Bid: ");
-            if (scanf("%f", &newBid) != 1)
-            {
-                printf("Invalid input. Please enter a number.\n");
-                while (getchar() != '\n')
-                    ;
-                continue;
-            }
-
-            struct AuctionItem *item = searchItem(root, itemId);
-            if (item != NULL)
-            {
-                if (newBid > item->currentBid)
-                {
-                    item->previousBid = item->currentBid;
-                    item->currentBid = newBid;
-                    printf("Bid placed successfully!\n");
-
-                    saveToFile(root, filename);
-                }
-                else
-                {
-                    printf("New bid must be higher than the current bid.\n");
-                }
-            }
-            else
-            {
-                printf("Item not found.\n");
-            }
-
+            PlaceBid(hwnd);
             break;
-        }
         case 3:
-            printf("Auction Details:\n");
-            displayTree(root);
+            DisplayAuctionDetails(hwnd);
             break;
         case 4:
-            printf("Exiting...\n");
+            ExitApplication(hwnd);
             break;
-        default:
-            printf("Invalid choice! Please enter a valid option.\n");
         }
-    } while (choice != 4);
-
-    freeAVLTree(root);
-
+        break;
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        break;
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        break;
+    default:
+        return DefWindowProc(hwnd, msg, wParam, lParam);
+    }
     return 0;
 }
 
-struct AVLNode *createNode(struct AuctionItem *item)
-{
-    struct AVLNode *newNode = (struct AVLNode *)malloc(sizeof(struct AVLNode));
-    if (newNode == NULL)
-    {
-        printf("Memory allocation failed.\n");
-        exit(EXIT_FAILURE);
-    }
 
-    newNode->key = item->itemId;
-    newNode->height = 1;
-    newNode->item = item;
-    newNode->left = NULL;
-    newNode->right = NULL;
+// Function to add controls to the window
+void AddControls(HWND hwnd) {
+    // Static label for the window title
+CreateWindow("STATIC", "BIDDING HUB: AVL-BASED AUCTION ITEM MANAGEMENT", WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 0, 500, 40, hwnd, NULL, NULL, NULL);
 
-    return newNode;
+// Item ID input field
+CreateWindow("STATIC", "Item ID:", WS_VISIBLE | WS_CHILD, 20, 100, 80, 20, hwnd, NULL, NULL, NULL);
+hwndItemId = CreateWindow("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER, 110, 100, 150, 20, hwnd, NULL, NULL, NULL);
+
+// Item Name input field
+CreateWindow("STATIC", "Item Name:", WS_VISIBLE | WS_CHILD, 20, 130, 80, 20, hwnd, NULL, NULL, NULL);
+hwndItemName = CreateWindow("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER, 110, 130, 150, 20, hwnd, NULL, NULL, NULL);
+
+// Current Bid (Updated Price) input field
+CreateWindow("STATIC", "Current Price:", WS_VISIBLE | WS_CHILD, 20, 160, 100, 20, hwnd, NULL, NULL, NULL);
+hwndCurrentBid = CreateWindow("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER, 110, 160, 150, 20, hwnd, NULL, NULL, NULL);
+
+// New Bid input field
+CreateWindow("STATIC", "New Bid:", WS_VISIBLE | WS_CHILD, 20, 190, 80, 20, hwnd, NULL, NULL, NULL);
+hwndNewBid = CreateWindow("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER, 110, 190, 150, 20, hwnd, NULL, NULL, NULL);
+
+// "Add Item" button
+CreateWindow("BUTTON", "Add Item", WS_VISIBLE | WS_CHILD, 20, 230, 100, 30, hwnd, (HMENU)1, NULL, NULL);
+
+// "Place Bid" button
+CreateWindow("BUTTON", "Place Bid", WS_VISIBLE | WS_CHILD, 140, 230, 100, 30, hwnd, (HMENU)2, NULL, NULL);
+
 }
 
-void freeAVLTree(struct AVLNode *node)
-{
-    if (node == NULL)
-        return;
 
-    freeAVLTree(node->left);
-    freeAVLTree(node->right);
-    free(node->item);
-    free(node);
+
+// Function to create a new AVL node
+AVLNode* newNode(char itemId[], char itemName[], char currentBid[]) {
+    AVLNode* node = (AVLNode*)malloc(sizeof(AVLNode));
+    strcpy(node->itemId, itemId);
+    strcpy(node->itemName, itemName);
+    strcpy(node->currentBid, currentBid);
+    node->left = NULL;
+    node->right = NULL;
+    node->height = 1;
+    return node;
 }
 
-int height(struct AVLNode *node)
-{
+// Function to get height of a node
+int height(AVLNode* node) {
     if (node == NULL)
         return 0;
     return node->height;
 }
 
-int max(int a, int b)
-{
-    return (a > b) ? a : b;
-}
-
-struct AVLNode *rightRotate(struct AVLNode *y)
-{
-    struct AVLNode *x = y->left;
-    struct AVLNode *T2 = x->right;
-
-    x->right = y;
-    y->left = T2;
-
-    y->height = max(height(y->left), height(y->right)) + 1;
-    x->height = max(height(x->left), height(x->right)) + 1;
-
-    return x;
-}
-
-struct AVLNode *leftRotate(struct AVLNode *x)
-{
-    struct AVLNode *y = x->right;
-    struct AVLNode *T2 = y->left;
-
-    y->left = x;
-    x->right = T2;
-
-    x->height = max(height(x->left), height(x->right)) + 1;
-    y->height = max(height(y->left), height(y->right)) + 1;
-
-    return y;
-}
-
-int getBalance(struct AVLNode *node)
-{
+// Function to calculate balance factor of a node
+int balanceFactor(AVLNode* node) {
     if (node == NULL)
         return 0;
     return height(node->left) - height(node->right);
 }
 
-struct AVLNode *insertNode(struct AVLNode *node, struct AuctionItem *item)
-{
-    if (node == NULL)
-        return createNode(item);
+// Function to perform right rotation
+AVLNode* rightRotate(AVLNode* y) {
+    AVLNode* x = y->left;
+    AVLNode* T2 = x->right;
 
-    if (item->itemId < node->key)
-        node->left = insertNode(node->left, item);
-    else if (item->itemId > node->key)
-        node->right = insertNode(node->right, item);
-    else
-        return node;
+    x->right = y;
+    y->left = T2;
 
-    node->height = 1 + max(height(node->left), height(node->right));
+    y->height = 1 + (height(y->left) > height(y->right) ? height(y->left) : height(y->right));
+    x->height = 1 + (height(x->left) > height(x->right) ? height(x->left) : height(x->right));
 
-    int balance = getBalance(node);
-
-    if (balance > 1 && item->itemId < node->left->key)
-        return rightRotate(node);
-
-    if (balance < -1 && item->itemId > node->right->key)
-        return leftRotate(node);
-
-    if (balance > 1 && item->itemId > node->left->key)
-    {
-        node->left = leftRotate(node->left);
-        return rightRotate(node);
-    }
-
-    if (balance < -1 && item->itemId < node->right->key)
-    {
-        node->right = rightRotate(node->right);
-        return leftRotate(node);
-    }
-
-    return node;
+    return x;
 }
 
-struct AVLNode *minValueNode(struct AVLNode *node)
-{
-    struct AVLNode *current = node;
+// Function to perform left rotation
+AVLNode* leftRotate(AVLNode* x) {
+    AVLNode* y = x->right;
+    AVLNode* T2 = y->left;
 
-    while (current->left != NULL)
-        current = current->left;
+    y->left = x;
+    x->right = T2;
 
-    return current;
+    x->height = 1 + (height(x->left) > height(x->right) ? height(x->left) : height(x->right));
+    y->height = 1 + (height(y->left) > height(y->right) ? height(y->left) : height(y->right));
+
+    return y;
 }
 
-struct AVLNode *deleteNode(struct AVLNode *root, int key)
-{
-    if (root == NULL)
-        return root;
-
-    if (key < root->key)
-        root->left = deleteNode(root->left, key);
-    else if (key > root->key)
-        root->right = deleteNode(root->right, key);
-    else
-    {
-        if ((root->left == NULL) || (root->right == NULL))
-        {
-            struct AVLNode *temp = root->left ? root->left : root->right;
-
-            if (temp == NULL)
-            {
-                temp = root;
-                root = NULL;
-            }
-            else
-                *root = *temp;
-
-            free(temp->item);
-            free(temp);
-        }
-        else
-        {
-            struct AVLNode *temp = minValueNode(root->right);
-            root->key = temp->key;
-            root->right = deleteNode(root->right, temp->key);
-        }
-    }
-
-    if (root == NULL)
-        return root;
-
-    root->height = 1 + max(height(root->left), height(root->right));
-
-    int balance = getBalance(root);
-
-    if (balance > 1 && getBalance(root->left) >= 0)
-        return rightRotate(root);
-
-    if (balance > 1 && getBalance(root->left) < 0)
-    {
-        root->left = leftRotate(root->left);
-        return rightRotate(root);
-    }
-
-    if (balance < -1 && getBalance(root->right) <= 0)
-        return leftRotate(root);
-
-    if (balance < -1 && getBalance(root->right) > 0)
-    {
-        root->right = rightRotate(root->right);
-        return leftRotate(root);
-    }
-
-    return root;
-}
-
-struct AuctionItem *searchItem(struct AVLNode *root, int itemId)
-{
-    if (root == NULL || root->key == itemId)
-        return (root == NULL) ? NULL : root->item;
-
-    if (root->key < itemId)
-        return searchItem(root->right, itemId);
-
-    return searchItem(root->left, itemId);
-}
-
-void displayTree(struct AVLNode *root)
-{
-    if (root != NULL)
-    {
-        displayTree(root->left);
-        printf("Item ID: %d, Item Name: %s, Current Bid: %.2f, Previous Bid: %.2f\n", root->item->itemId, root->item->itemName, root->item->currentBid, root->item->previousBid);
-        displayTree(root->right);
-    }
-}
-
-void displayMenu()
-{
-    printf("\nMenu:\n");
-    printf("1. Add Item for Auction\n");
-    printf("2. Place Bid\n");
-    printf("3. Display Auction Details\n");
-    printf("4. Exit\n");
-}
-
-void saveToFile(struct AVLNode *root, const char *filename)
-{
-    FILE *file = fopen(filename, "w");
-    if (file == NULL)
-    {
-        printf("Error opening file for writing.\n");
+// Function to insert a node into AVL tree
+void insert(AVLNode** root, char itemId[], char itemName[], char currentBid[]) {
+    if (*root == NULL) {
+        *root = newNode(itemId, itemName, currentBid);
         return;
     }
 
-    saveNodesToFile(root, file);
-    fclose(file);
+    if (strcmp(itemId, (*root)->itemId) < 0)
+        insert(&(*root)->left, itemId, itemName, currentBid);
+    else
+        insert(&(*root)->right, itemId, itemName, currentBid);
+
+    // Update height of this ancestor node
+    (*root)->height = 1 + (height((*root)->left) > height((*root)->right) ? height((*root)->left) : height((*root)->right));
+
+    // Get balance factor of this ancestor node to check whether this node became unbalanced
+    int balance = balanceFactor(*root);
+
+    // If this node becomes unbalanced, then there are 4 cases
+
+    // Left Left Case
+    if (balance > 1 && strcmp(itemId, (*root)->left->itemId) < 0)
+        *root = rightRotate(*root);
+
+    // Right Right Case
+    if (balance < -1 && strcmp(itemId, (*root)->right->itemId) > 0)
+        *root = leftRotate(*root);
+
+    // Left Right Case
+    if (balance > 1 && strcmp(itemId, (*root)->left->itemId) > 0) {
+        (*root)->left = leftRotate((*root)->left);
+        *root = rightRotate(*root);
+    }
+
+    // Right Left Case
+    if (balance < -1 && strcmp(itemId, (*root)->right->itemId) < 0) {
+        (*root)->right = rightRotate((*root)->right);
+        *root = leftRotate(*root);
+    }
 }
 
-void saveNodesToFile(struct AVLNode *node, FILE *file)
-{
-    if (node == NULL)
+// Function to add item to the AVL tree
+void AddItem(HWND hwnd) {
+    // Get input values
+    char itemId[50], itemName[50], currentBid[50];
+    GetWindowText(hwndItemId, itemId, sizeof(itemId));
+    GetWindowText(hwndItemName, itemName, sizeof(itemName));
+    GetWindowText(hwndCurrentBid, currentBid, sizeof(currentBid));
+
+    // Insert the item into the AVL tree
+    insert(&root, itemId, itemName, currentBid);
+
+    // Append the input values to the file
+    FILE *file = fopen("auction_data.txt", "a");
+    if (file != NULL) {
+        fprintf(file, "Item Id: %s\nItem Name: %s\nCurrent Price: %s\n\n", itemId, itemName, currentBid);
+        fclose(file);
+        MessageBox(hwnd, "Item added successfully!", "Success", MB_OK | MB_ICONINFORMATION);
+    } else {
+        MessageBox(hwnd, "Error opening file for writing.", "Error", MB_OK | MB_ICONERROR);
+    }
+}
+
+
+void updateBid(AVLNode* root, char itemId[], char currentBid[], char newBid[]) {
+    if (root == NULL)
         return;
 
-    fprintf(file,"BIDDING HUB: AVL-BASED AUCTION ITEM MANAGEMENT\n\n");
-    fprintf(file, "Item ID: %d\nItem Name: %s\nUpdated Price: %.2f\nPrevious Bid: %.2f\n", node->item->itemId, node->item->itemName, node->item->currentBid, node->item->previousBid);
+    int compare = strcmp(itemId, root->itemId);
+    if (compare == 0) {
+        // Convert currentBid and newBid to integers for comparison
+        int currentBidValue = atoi(root->currentBid);
+        int newBidValue = atoi(newBid);
 
-    saveNodesToFile(node->left, file);
-    saveNodesToFile(node->right, file);
+        // Check if the new bid is greater than the current bid
+        if (newBidValue > currentBidValue) {
+            // Update current bid
+            sprintf(root->currentBid, "%d", newBidValue);
+            MessageBox(NULL, "Bid placed successfully!", "Success", MB_OK | MB_ICONINFORMATION);
+        } else {
+            // Display an error message if the new bid is not greater
+            MessageBox(NULL, "New bid must be greater than current bid.", "Error", MB_OK | MB_ICONERROR);
+        }
+    } else if (compare < 0) {
+        updateBid(root->left, itemId, currentBid, newBid);
+    } else {
+        updateBid(root->right, itemId, currentBid, newBid);
+    }
 }
 
-struct AVLNode *loadFromFile(const char *filename)
-{
-    FILE *file = fopen(filename, "r");
-    if (file == NULL)
-    {
-        printf("File not found or unable to open.\n");
-        return NULL;
-    }
 
-    struct AVLNode *root = NULL;
-    int itemId;
-    char itemName[50];
-    float currentBid, previousBid;
 
-    while (fscanf(file, "%d,%[^,],%f,%f\n", &itemId, itemName, &currentBid, &previousBid) == 4)
-    {
-        struct AuctionItem *newItem = (struct AuctionItem *)malloc(sizeof(struct AuctionItem));
-        if (newItem == NULL)
-        {
-            printf("Memory allocation failed.\n");
-            exit(EXIT_FAILURE);
+void PlaceBid(HWND hwnd) {
+    // Get input values
+    char itemId[50], currentBid[50], newBid[50];
+    GetWindowText(hwndItemId, itemId, sizeof(itemId));
+    GetWindowText(hwndCurrentBid, currentBid, sizeof(currentBid));
+    GetWindowText(hwndNewBid, newBid, sizeof(newBid));
+
+    // Convert currentBid and newBid to integers for comparison
+    int currentBidValue = atoi(currentBid);
+    int newBidValue = atoi(newBid);
+
+    // Check if the new bid is greater than the current bid
+    if (newBidValue > currentBidValue) {
+        // Update the bid in the AVL tree
+        updateBid(root, itemId, currentBid, newBid);
+
+        // Append the updated bid to the file
+        FILE *file = fopen("auction_data.txt", "a");
+        if (file != NULL) {
+            fprintf(file, "Item Id: %s\nCurrent Price: %s\nUpdated Price: %s\n\n", itemId, currentBid, newBid);
+            fclose(file);
+            MessageBox(hwnd, "Bid placed successfully!", "Success", MB_OK | MB_ICONINFORMATION);
+        } else {
+            MessageBox(hwnd, "Error opening file for writing.", "Error", MB_OK | MB_ICONERROR);
         }
-
-        newItem->itemId = itemId;
-        strcpy(newItem->itemName, itemName);
-        newItem->currentBid = currentBid;
-        newItem->previousBid = previousBid;
-
-        root = insertNode(root, newItem);
+    } else {
+        // Display an error message if the new bid is not greater
+        MessageBox(hwnd, "New bid must be greater than current bid.", "Error", MB_OK | MB_ICONERROR);
     }
+}
 
-    fclose(file);
-    return root;
+
+void DisplayAuctionDetails(HWND hwnd) {
+    // Implement Display Auction Details functionality
+    MessageBox(hwnd, "Display Auction Details functionality will be implemented here.", "Display Auction Details", MB_OK | MB_ICONINFORMATION);
+}
+
+void ExitApplication(HWND hwnd) {
+    // Implement Exit Application functionality
+    MessageBox(hwnd, "Exiting Application...", "Exit", MB_OK | MB_ICONINFORMATION);
+    PostQuitMessage(0);
 }
